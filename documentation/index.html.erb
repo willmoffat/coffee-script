@@ -1494,7 +1494,9 @@ Expressions
         else
           $(el).text window.compiledJS
         $('#error').hide()
+        $('#repl_results').removeClass 'error'
       catch error
+        $('#repl_results').addClass 'error'
         $('#error').text(error.message).show()
 
     # Listen for keypresses and recompile.
