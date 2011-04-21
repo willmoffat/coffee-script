@@ -167,6 +167,9 @@ div.code {
   #repl_results.error {
     color: #862322;
   }
+  .minibutton.run.error {
+    display: none;
+  }
   .navigation {
     height: 50px;
     font-size: 11px;
