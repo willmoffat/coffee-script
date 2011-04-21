@@ -1510,7 +1510,7 @@ Expressions
     window.loadConsole = (coffee) ->
       $('#repl_source').val coffee
       compileSource()
-      $('.navigation.try').addClass('active')
+      $('.navigation.try').addClass 'active'
       false
 
     # Helper to hide the menus.
@@ -1523,7 +1523,7 @@ Expressions
     $('.navigation').click (e) ->
       return if e.target.tagName.toLowerCase() is 'a'
       return false if $(e.target).closest('.repl_wrapper').length
-      if $(this).hasClass('active')
+      if $(this).hasClass 'active'
         closeMenus()
       else
         closeMenus()
@@ -1538,7 +1538,7 @@ Expressions
         closeMenus() if e.which == 27
         evalJS() if e.which == 13 and (e.metaKey or e.ctrlKey) and $('.minibutton.run:visible').length
       .click (e) ->
-        return false if $(e.target).hasClass('minibutton')
+        return false if $(e.target).hasClass 'minibutton'
         closeMenus()
 
     $('#open_webchat').click ->
