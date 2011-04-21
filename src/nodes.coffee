@@ -477,7 +477,7 @@ exports.Call = class Call extends Base
         rite = new Value left
       rite = new Call rite, @args
       rite.isNew = @isNew
-      left = new Literal "typeof #{ left.compile o } == \"function\""
+      left = new Literal "typeof #{ left.compile o } === \"function\""
       return new If left, new Value(rite), soak: yes
     call = this
     list = []
@@ -545,7 +545,7 @@ exports.Call = class Call extends Base
 		(function(func, args, ctor) {
 		#{idt}ctor.prototype = func.prototype;
 		#{idt}var child = new ctor, result = func.apply(child, args);
-		#{idt}return typeof result == "object" ? result : child;
+		#{idt}return typeof result === "object" ? result : child;
 		#{@tab}})(#{ @variable.compile o, LEVEL_LIST }, #{splatArgs}, function() {})
       """
     base = new Value @variable
@@ -907,18 +907,18 @@ exports.Assign = class Assign extends Base
       return @compileSplice       o if @variable.isSplice()
       return @compileConditional  o if @context in ['||=', '&&=', '?=']
     name = @variable.compile o, LEVEL_LIST
-    if @value instanceof Code and match = @METHOD_DEF.exec name
-      @value.name  = match[2]
-      @value.klass = match[1] if match[1]
-    val = @value.compile o, LEVEL_LIST
-    return "#{name}: #{val}" if @context is 'object'
-    unless @variable.isAssignable()
+    unless @context or @variable.isAssignable()
       throw SyntaxError "\"#{ @variable.compile o }\" cannot be assigned."
     unless @context or isValue and (@variable.namespaced or @variable.hasProperties())
       if @param
         o.scope.add name, 'var'
       else
         o.scope.find name
+    if @value instanceof Code and match = @METHOD_DEF.exec name
+      @value.name  = match[2]
+      @value.klass = match[1] if match[1]
+    val = @value.compile o, LEVEL_LIST
+    return "#{name}: #{val}" if @context is 'object'
     val = name + " #{ @context or '=' } " + val
     if o.level <= LEVEL_LIST then val else "(#{val})"
 
@@ -1418,9 +1418,9 @@ exports.Existence = class Existence extends Base
     code = @expression.compile o, LEVEL_OP
     code = if IDENTIFIER.test(code) and not o.scope.check code
       if @negated
-        "typeof #{code} == \"undefined\" || #{code} == null"
+        "typeof #{code} === \"undefined\" || #{code} === null"
       else
-        "typeof #{code} != \"undefined\" && #{code} != null"
+        "typeof #{code} !== \"undefined\" && #{code} !== null"
     else
       sym = if @negated then '==' else '!='
       "#{code} #{sym} null"
