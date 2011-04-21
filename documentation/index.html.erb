@@ -1489,6 +1489,7 @@ Expressions
       try
         window.compiledJS = CoffeeScript.compile source, bare: on
         el = $('#repl_results')[0]
+        # Why is this test of el.innerText necessary. Doesn't jQuery.text() cover all cases?
         if el.innerText
           el.innerText = window.compiledJS
         else
