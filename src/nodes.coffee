@@ -250,7 +250,7 @@ exports.Block = class Block extends Base
     post = @compileNode o
     {scope} = o
     if scope.expressions is this
-      if not o.globals and o.scope.hasDeclarations()
+      if o.scope.hasDeclarations()
         code += "#{@tab}var #{ scope.declaredVariables().join(', ') };\n"
       if scope.hasAssignments
         code += "#{@tab}var #{ multident scope.assignedVariables().join(', '), @tab };\n"
@@ -404,19 +404,22 @@ exports.Value = class Value extends Base
 
   # Unfold a soak into an `If`: `a?.b` -> `a.b if a?`
   unfoldSoak: (o) ->
-    if ifn = @base.unfoldSoak o
-      Array::push.apply ifn.body.properties, @properties
-      return ifn
-    for prop, i in @properties when prop.soak
-      prop.soak = off
-      fst = new Value @base, @properties.slice 0, i
-      snd = new Value @base, @properties.slice i
-      if fst.isComplex()
-        ref = new Literal o.scope.freeVariable 'ref'
-        fst = new Parens new Assign ref, fst
-        snd.base = ref
-      return new If new Existence(fst), snd, soak: on
-    null
+    return @unfoldedSoak if @unfoldedSoak?
+    result = do =>
+      if ifn = @base.unfoldSoak o
+        Array::push.apply ifn.body.properties, @properties
+        return ifn
+      for prop, i in @properties when prop.soak
+        prop.soak = off
+        fst = new Value @base, @properties.slice 0, i
+        snd = new Value @base, @properties.slice i
+        if fst.isComplex()
+          ref = new Literal o.scope.freeVariable 'ref'
+          fst = new Parens new Assign ref, fst
+          snd.base = ref
+        return new If new Existence(fst), snd, soak: on
+      null
+    @unfoldedSoak = result or no
 
 #### Comment
 
@@ -542,11 +545,11 @@ exports.Call = class Call extends Base
     if @isNew
       idt = @tab + TAB
       return """
-		(function(func, args, ctor) {
-		#{idt}ctor.prototype = func.prototype;
-		#{idt}var child = new ctor, result = func.apply(child, args);
-		#{idt}return typeof result === "object" ? result : child;
-		#{@tab}})(#{ @variable.compile o, LEVEL_LIST }, #{splatArgs}, function() {})
+        (function(func, args, ctor) {
+        #{idt}ctor.prototype = func.prototype;
+        #{idt}var child = new ctor, result = func.apply(child, args);
+        #{idt}return typeof result === "object" ? result : child;
+        #{@tab}})(#{ @variable.compile o, LEVEL_LIST }, #{splatArgs}, function() {})
       """
     base = new Value @variable
     if (name = base.properties.pop()) and base.isComplex()
@@ -637,26 +640,29 @@ exports.Range = class Range extends Base
   # needed to iterate over the values in the range. Used by comprehensions.
   compileNode: (o) ->
     @compileVariables o
-    return    @compileArray(o)  unless o.index
-    return    @compileSimple(o) if @fromNum and @toNum
+    return @compileArray(o) unless o.index
+    return @compileSimple(o) if @fromNum and @toNum
     idx      = del o, 'index'
     step     = del o, 'step'
-    vars     = "#{idx} = #{@from}" + if @to isnt @toVar then ", #{@to}" else ''
+    stepvar  = o.scope.freeVariable "step" if step
+    varPart  = "#{idx} = #{@from}" + ( if @to isnt @toVar then ", #{@to}" else '' ) + if step then ", #{stepvar} = #{step.compile(o)}" else ''
     cond     = "#{@fromVar} <= #{@toVar}"
-    compare  = "#{cond} ? #{idx} <#{@equals} #{@toVar} : #{idx} >#{@equals} #{@toVar}"
-    incr     = if step then "#{idx} += #{step.compile(o)}" else "#{cond} ? #{idx}++ : #{idx}--"
-    "#{vars}; #{compare}; #{incr}"
+    condPart = "#{cond} ? #{idx} <#{@equals} #{@toVar} : #{idx} >#{@equals} #{@toVar}"
+    stepPart = if step then "#{idx} += #{stepvar}" else "#{cond} ? #{idx}++ : #{idx}--"
+    "#{varPart}; #{condPart}; #{stepPart}"
 
   # Compile a simple range comprehension, with integers.
   compileSimple: (o) ->
     [from, to] = [+@fromNum, +@toNum]
     idx        = del o, 'index'
     step       = del o, 'step'
-    step       and= "#{idx} += #{step.compile(o)}"
-    if from <= to
-      "#{idx} = #{from}; #{idx} <#{@equals} #{to}; #{step or "#{idx}++"}"
-    else
-      "#{idx} = #{from}; #{idx} >#{@equals} #{to}; #{step or "#{idx}--"}"
+    stepvar    = o.scope.freeVariable "step" if step
+    varPart    = "#{idx} = #{from}"
+    varPart   += ", #{stepvar} = #{step.compile(o)}" if step
+    condPart   = if from <= to then "#{idx} <#{@equals} #{to}" else "#{idx} >#{@equals} #{to}"
+    stepPart   = "#{idx} += #{stepvar}" if step
+    stepPart   = ( if from <= to then "#{idx}++" else "#{idx}--" ) if not step
+    "#{varPart}; #{condPart}; #{stepPart}"
 
   # When used as a value, expand the range into the equivalent array.
   compileArray: (o) ->
@@ -810,13 +816,13 @@ exports.Class = class Class extends Base
     if @boundFuncs.length
       for bvar in @boundFuncs
         bname = bvar.compile o
-        @ctor.body.unshift new Literal "this.#{bname} = #{utility 'bind'}(this.#{bname}, this);"
+        @ctor.body.unshift new Literal "this.#{bname} = #{utility 'bind'}(this.#{bname}, this)"
 
   # Merge the properties from a top-level object as prototypal properties
   # on the class.
-  addProperties: (node, name) ->
+  addProperties: (node, name, o) ->
     props = node.base.properties.slice 0
-    while assign = props.shift()
+    exprs = while assign = props.shift()
       if assign instanceof Assign
         base = assign.variable.base
         delete assign.context
@@ -829,7 +835,8 @@ exports.Class = class Class extends Base
           if func instanceof Code
             assign = @ctor = func
           else
-            assign = @ctor = new Assign(new Value(new Literal name), func)
+            @externalCtor = o.scope.freeVariable 'class'
+            assign = new Assign new Literal(@externalCtor), func
         else
           unless assign.variable.this
             assign.variable = new Value(new Literal(name), [new Access(base, 'proto')])
@@ -837,15 +844,16 @@ exports.Class = class Class extends Base
             @boundFuncs.push base
             func.bound = no
       assign
+    compact exprs
 
   # Walk the body of the class, looking for prototype properties to be converted.
-  walkBody: (name) ->
+  walkBody: (name, o) ->
     @traverseChildren false, (child) =>
       return false if child instanceof Class
       if child instanceof Block
         for node, i in exps = child.expressions
           if node instanceof Value and node.isObject(true)
-            exps[i] = @addProperties node, name
+            exps[i] = @addProperties node, name, o
         child.expressions = exps = flatten exps
 
   # Make sure that a constructor is defined for the class, and properly
@@ -853,7 +861,8 @@ exports.Class = class Class extends Base
   ensureConstructor: (name) ->
     if not @ctor
       @ctor = new Code
-      @ctor.body.push new Call 'super', [new Splat new Literal 'arguments'] if @parent
+      @ctor.body.push new Literal "#{name}.__super__.constructor.apply(this, arguments)" if @parent
+      @ctor.body.push new Literal "#{@externalCtor}.apply(this, arguments)" if @externalCtor
       @body.expressions.unshift @ctor
     @ctor.ctor     = @ctor.name = name
     @ctor.klass    = null
@@ -868,9 +877,10 @@ exports.Class = class Class extends Base
     lname = new Literal name
 
     @setContext name
-    @walkBody name
-    @body.expressions.unshift new Extends lname, @parent if @parent
+    @walkBody name, o
     @ensureConstructor name
+    @body.expressions.unshift new Extends lname, @parent if @parent
+    @body.expressions.unshift @ctor unless @ctor instanceof Code
     @body.expressions.push lname
     @addBoundFunctions o
 
@@ -1048,7 +1058,6 @@ exports.Code = class Code extends Base
     o.scope.shared  = del o, 'sharedScope'
     o.indent        += TAB
     delete o.bare
-    delete o.globals
     vars   = []
     exprs  = []
     for param in @params when param.splat
@@ -1490,50 +1499,53 @@ exports.For = class For extends Base
   # comprehensions. Some of the generated code can be shared in common, and
   # some cannot.
   compileNode: (o) ->
-    body          = Block.wrap [@body]
-    lastJumps     = last(body.expressions)?.jumps()
-    @returns      = no if lastJumps and lastJumps instanceof Return
-    source        = if @range then @source.base else @source
-    scope         = o.scope
-    name          = @name  and @name.compile o, LEVEL_LIST
-    index         = @index and @index.compile o, LEVEL_LIST
+    body      = Block.wrap [@body]
+    lastJumps = last(body.expressions)?.jumps()
+    @returns  = no if lastJumps and lastJumps instanceof Return
+    source    = if @range then @source.base else @source
+    scope     = o.scope
+    name      = @name  and @name.compile o, LEVEL_LIST
+    index     = @index and @index.compile o, LEVEL_LIST
     scope.find(name,  immediate: yes) if name and not @pattern
     scope.find(index, immediate: yes) if index
-    rvar          = scope.freeVariable 'results' if @returns
-    ivar          = (if @range then name else index) or scope.freeVariable 'i'
-    name          = ivar if @pattern
-    varPart       = ''
-    guardPart     = ''
-    defPart       = ''
-    idt1          = @tab + TAB
+    rvar      = scope.freeVariable 'results' if @returns
+    ivar      = (if @range then name else index) or scope.freeVariable 'i'
+    # the `_by` variable is created twice in `Range`s if we don't prevent it from being declared here
+    stepvar   = scope.freeVariable "step" if @step and not @range
+    name      = ivar if @pattern
+    varPart   = ''
+    guardPart = ''
+    defPart   = ''
+    idt1      = @tab + TAB
     if @range
       forPart = source.compile merge(o, {index: ivar, @step})
     else
-      svar = @source.compile o, LEVEL_LIST
+      svar    = @source.compile o, LEVEL_LIST
       if (name or @own) and not IDENTIFIER.test svar
-        defPart = "#{@tab}#{ref = scope.freeVariable 'ref'} = #{svar};\n"
-        svar = ref
+        defPart    = "#{@tab}#{ref = scope.freeVariable 'ref'} = #{svar};\n"
+        svar       = ref
       if name and not @pattern
-        namePart = "#{name} = #{svar}[#{ivar}]"
+        namePart   = "#{name} = #{svar}[#{ivar}]"
       unless @object
-        lvar        = scope.freeVariable 'len'
-        stepPart    = if @step then "#{ivar} += #{ @step.compile(o, LEVEL_OP) }" else "#{ivar}++"
-        forPart     = "#{ivar} = 0, #{lvar} = #{svar}.length; #{ivar} < #{lvar}; #{stepPart}"
+        lvar       = scope.freeVariable 'len'
+        forVarPart = "#{ivar} = 0, #{lvar} = #{svar}.length" + if @step then ", #{stepvar} = #{@step.compile(o, LEVEL_OP)}" else ''
+        stepPart   = if @step then "#{ivar} += #{stepvar}" else "#{ivar}++"
+        forPart    = "#{forVarPart}; #{ivar} < #{lvar}; #{stepPart}"
     if @returns
-      resultPart    = "#{@tab}#{rvar} = [];\n"
-      returnResult  = "\n#{@tab}return #{rvar};"
-      body          = Push.wrap rvar, body
+      resultPart   = "#{@tab}#{rvar} = [];\n"
+      returnResult = "\n#{@tab}return #{rvar};"
+      body         = Push.wrap rvar, body
     if @guard
-      body          = Block.wrap [new If @guard, body]
+      body         = Block.wrap [new If @guard, body]
     if @pattern
       body.expressions.unshift new Assign @name, new Literal "#{svar}[#{ivar}]"
-    defPart         += @pluckDirectCall o, body
-    varPart         = "\n#{idt1}#{namePart};" if namePart
+    defPart     += @pluckDirectCall o, body
+    varPart     = "\n#{idt1}#{namePart};" if namePart
     if @object
-      forPart       = "#{ivar} in #{svar}"
-      guardPart     = "\n#{idt1}if (!#{utility('hasProp')}.call(#{svar}, #{ivar})) continue;" if @own
-    body            = body.compile merge(o, indent: idt1), LEVEL_TOP
-    body            = '\n' + body + '\n' if body
+      forPart   = "#{ivar} in #{svar}"
+      guardPart = "\n#{idt1}if (!#{utility('hasProp')}.call(#{svar}, #{ivar})) continue;" if @own
+    body        = body.compile merge(o, indent: idt1), LEVEL_TOP
+    body        = '\n' + body + '\n' if body
     """
     #{defPart}#{resultPart or ''}#{@tab}for (#{forPart}) {#{guardPart}#{varPart}#{body}#{@tab}}#{returnResult or ''}
     """

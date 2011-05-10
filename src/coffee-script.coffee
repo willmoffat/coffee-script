@@ -8,19 +8,20 @@
 
 fs               = require 'fs'
 path             = require 'path'
+vm               = require 'vm'
 {Lexer,RESERVED} = require './lexer'
 {parser}         = require './parser'
 
 # TODO: Remove registerExtension when fully deprecated.
 if require.extensions
   require.extensions['.coffee'] = (module, filename) ->
-    content = compile fs.readFileSync filename, 'utf8'
+    content = compile fs.readFileSync(filename, 'utf8'), {filename}
     module._compile content, filename
 else if require.registerExtension
   require.registerExtension '.coffee', (content) -> compile content
 
 # The current CoffeeScript version number.
-exports.VERSION = '1.1.0-pre'
+exports.VERSION = '1.1.1'
 
 # Words that cannot be used as identifiers in CoffeeScript code
 exports.RESERVED = RESERVED
@@ -57,6 +58,7 @@ exports.run = (code, options) ->
   root = module
   while root.parent
     root = root.parent
+
   # Set the filename.
   root.filename = process.argv[1] =
       if options.filename then fs.realpathSync(options.filename) else '.'
@@ -77,10 +79,19 @@ exports.run = (code, options) ->
 
 # Compile and evaluate a string of CoffeeScript (in a Node.js-like environment).
 # The CoffeeScript REPL uses this to run the input.
-exports.eval = (code, options) ->
-  __filename = module.filename = process.argv[1] = options.filename
-  __dirname  = path.dirname __filename
-  eval compile code, options
+exports.eval = (code, options = {}) ->
+  sandbox = options.sandbox
+  unless sandbox
+    sandbox =
+      require: require
+      module : { exports: {} }
+    sandbox[g] = global[g] for g of global
+    sandbox.global = sandbox
+    sandbox.global.global = sandbox.global.root = sandbox.global.GLOBAL = sandbox
+  sandbox.__filename = options.filename || 'eval'
+  sandbox.__dirname  = path.dirname sandbox.__filename
+  js = compile "_=(#{code.trim()})", options
+  vm.runInNewContext js, sandbox, sandbox.__filename
 
 # Instantiate a Lexer for our use here.
 lexer = new Lexer

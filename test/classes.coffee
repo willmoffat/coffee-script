@@ -278,8 +278,7 @@ test "classes with value'd constructors", ->
 
   counter = 0
   classMaker = ->
-    counter++
-    inner = counter
+    inner = ++counter
     ->
       @value = inner
 
@@ -289,10 +288,10 @@ test "classes with value'd constructors", ->
   class Two
     constructor: classMaker()
 
-  ok (new One).value is 1
-  ok (new Two).value is 2
-  ok (new One).value is 1
-  ok (new Two).value is 2
+  eq (new One).value, 1
+  eq (new Two).value, 2
+  eq (new One).value, 1
+  eq (new Two).value, 2
 
 
 test "exectuable class bodies", ->
@@ -436,3 +435,44 @@ test "`new` works against bare function", ->
   eq Date, new ->
     eq this, new => this
     Date
+
+
+test "#1182: a subclass should be able to set its constructor to an external function", ->
+  ctor = ->
+    @val = 1
+  class A
+  class B extends A
+    constructor: ctor
+  eq (new B).val, 1
+
+test "#1182: external constructors continued", ->
+  ctor = ->
+  class A
+  class B extends A
+    method: ->
+    constructor: ctor
+  ok B::method
+
+test "#1313: misplaced __extends", ->
+  nonce = {}
+  class A
+  class B extends A
+    prop: nonce
+    constructor: ->
+  eq nonce, B::prop
+
+test "#1182: execution order needs to be considered as well", ->
+  counter = 0
+  makeFn = (n) -> eq n, ++counter; ->
+  class B extends (makeFn 1)
+    @B: makeFn 2
+    constructor: makeFn 3
+
+test "#1182: external constructors with bound functions", ->
+  fn = ->
+    {one: 1}
+  class B
+  class A
+    constructor: fn
+    method: => this instanceof A
+  ok (new A).method.call(new B)

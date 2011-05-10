@@ -1,6 +1,6 @@
 # The `coffee` utility. Handles command-line compilation of CoffeeScript
 # into various forms: saved into `.js` files or printed to stdout, piped to
-# [JSLint](http://javascriptlint.com/) or recompiled every time the source is
+# [JavaScript Lint](http://javascriptlint.com/) or recompiled every time the source is
 # saved, printed as a token stream or as the syntax tree, or launch an
 # interactive REPL.
 
@@ -29,10 +29,10 @@ SWITCHES = [
   ['-c', '--compile',         'compile to JavaScript and save as .js files']
   ['-i', '--interactive',     'run an interactive CoffeeScript REPL']
   ['-o', '--output [DIR]',    'set the directory for compiled JavaScript']
-  ['-j', '--join',            'concatenate the scripts before compiling']
+  ['-j', '--join [FILE]',     'concatenate the scripts before compiling']
   ['-w', '--watch',           'watch scripts for changes, and recompile']
   ['-p', '--print',           'print the compiled JavaScript to stdout']
-  ['-l', '--lint',            'pipe the compiled JavaScript through JSLint']
+  ['-l', '--lint',            'pipe the compiled JavaScript through JavaScript Lint']
   ['-s', '--stdio',           'listen for and compile scripts over stdio']
   ['-e', '--eval',            'compile a string from the command line']
   ['-r', '--require [FILE*]', 'require a library before executing your script']
@@ -66,6 +66,8 @@ exports.run = ->
   if opts.run
     opts.literals = sources.splice(1).concat opts.literals
   process.ARGV = process.argv = process.argv.slice(0, 2).concat opts.literals
+  process.argv[0] = 'coffee'
+  process.execPath = require.main.filename
   compileScripts()
 
 # Asynchronously read in each CoffeeScript in a list of source files and
@@ -78,6 +80,7 @@ compileScripts = ->
       path.exists source, (exists) ->
         throw new Error "File not found: #{source}" if topLevel and not exists
         fs.stat source, (err, stats) ->
+          throw err if err
           if stats.isDirectory()
             fs.readdir source, (err, files) ->
               for file in files
@@ -131,7 +134,7 @@ compileStdio = ->
 # them together.
 compileJoin = ->
   code = contents.join '\n'
-  compileScript "concatenation", code, "concatenation"
+  compileScript opts.join, code, opts.join
 
 # Load files that are to-be-required before compilation occurs.
 loadRequires = ->

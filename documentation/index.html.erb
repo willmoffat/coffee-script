@@ -131,7 +131,7 @@
 
     <p>
       <b>Latest Version:</b>
-      <a href="http://github.com/jashkenas/coffee-script/tarball/1.0.1">1.0.1</a>
+      <a href="http://github.com/jashkenas/coffee-script/tarball/1.1.1">1.1.1</a>
     </p>
 
     <h2>
@@ -166,17 +166,21 @@
     </p>
 
     <pre>
-npm install coffee-script</pre>
+npm install -g coffee-script</pre>
 
-  <p>
-    If you'd prefer to install the latest master version of CoffeeScript, you
-    can clone the CoffeeScript
-    <a href="http://github.com/jashkenas/coffee-script">source repository</a>
-    from GitHub, or download
-    <a href="http://github.com/jashkenas/coffee-script/tarball/master">the source</a> directly.
-    To install the CoffeeScript compiler system-wide
-    under <tt>/usr/local</tt>, open the directory and run:
-  </p>
+    <p>
+      (Leave off the <tt>-g</tt> if you don't wish to install globally.)
+    </p>
+    
+    <p>
+      If you'd prefer to install the latest master version of CoffeeScript, you
+      can clone the CoffeeScript
+      <a href="http://github.com/jashkenas/coffee-script">source repository</a>
+      from GitHub, or download
+      <a href="http://github.com/jashkenas/coffee-script/tarball/master">the source</a> directly.
+      To install the CoffeeScript compiler system-wide
+      under <tt>/usr/local</tt>, open the directory and run:
+    </p>
 
   <pre>
 sudo bin/cake install</pre>
@@ -219,10 +223,11 @@ sudo bin/cake install</pre>
         </td>
       </tr>
       <tr>
-        <td><code>-j, --join</code></td>
+        <td><code>-j, --join [FILE]</code></td>
         <td>
           Before compiling, concatenate all scripts together in the order they
-          were passed. Useful for building large projects.
+          were passed, and write them into the specified file. 
+          Useful for building large projects.
         </td>
       </tr>
       <tr>
@@ -326,7 +331,7 @@ Expressions
       </li>
       <li>
         Concatenate a list of files into a single script:<br />
-        <tt>coffee -o lib/ --join --compile src/*.coffee</tt>
+        <tt>coffee --join project.js --compile src/*.coffee</tt>
       </li>
       <li>
         Print out the compiled JS from a one-liner:<br />
@@ -542,7 +547,7 @@ Expressions
       <b class="header">Array Slicing and Splicing with Ranges</b>
       Ranges can also be used to extract slices of arrays.
       With two dots (<tt>3..6</tt>), the range is inclusive (<tt>3, 4, 5, 6</tt>);
-      with three docs (<tt>3...6</tt>), the range excludes the end (<tt>3, 4, 5</tt>).
+      with three dots (<tt>3...6</tt>), the range excludes the end (<tt>3, 4, 5</tt>).
     </p>
     <%= code_for('slices', 'middle') %>
     <p>
@@ -701,15 +706,15 @@ Expressions
       in a single assignable expression.
     </p>
     <p>
-      Constructor functions are named, to better support reflection. In the
-      example below for the first class, <tt>this.constructor.name is "Animal"</tt>.
+      Constructor functions are named, to better support helpful stack traces.
     </p>
     <%= code_for('classes', true) %>
     <p>
       If structuring your prototypes classically isn't your cup of tea, CoffeeScript
       provides a couple of lower-level conveniences. The <tt>extends</tt> operator
-      helps with proper prototype setup, <tt>::</tt> gives you
-      quick access to an object's prototype, and <tt>super()</tt>
+      helps with proper prototype setup, and can be used to create an inheritance
+      chain between any pair of constructor functions; <tt>::</tt> gives you
+      quick access to an object's prototype; and <tt>super()</tt>
       is converted into a call against the immediate ancestor's method of the same name.
     </p>
     <%= code_for('prototypes', '"one_two".dasherize()') %>
@@ -842,7 +847,7 @@ Expressions
     <p>
       Sometimes you'd like to pass a block comment through to the generated
       JavaScript. For example, when you need to embed a licensing header at
-      the top of a file. Block comments, which mirror the synax for heredocs,
+      the top of a file. Block comments, which mirror the syntax for heredocs,
       are preserved in the generated code.
     </p>
     <%= code_for('block_comment') %>
@@ -1014,6 +1019,32 @@ Expressions
       <span id="change_log" class="bookmark"></span>
       Change Log
     </h2>
+    
+    <p>
+      <b class="header" style="margin-top: 20px;">1.1.1
+        <span class="timestamp"> &ndash; <small>May 10, 2011</small></span>
+      </b>
+      Bugfix release for classes with external constructor functions, see 
+      issue #1182.
+    </p>
+    
+    <p>
+      <b class="header" style="margin-top: 20px;">1.1.0
+        <span class="timestamp"> &ndash; <small>May 1, 2011</small></span>
+      </b>
+      When running via <tt>coffee</tt> executable, <tt>process.argv</tt> and 
+      friends now report <tt>coffee</tt> instead of <tt>node</tt>.
+      Better compatibility with <b>Node.js 0.4.x</b> module lookup changes.
+      The output in the REPL is now colorized, like Node's is.
+      Giving your concatenated CoffeeScripts a name when using <tt>--join</tt> is now mandatory.
+      Fix for lexing compound division <tt>/=</tt> as a regex accidentally.
+      All <tt>text/coffeescript</tt> tags should now execute in the order they're included.
+      Fixed an issue with extended subclasses using external constructor functions.
+      Fixed an edge-case infinite loop in <tt>addImplicitParentheses</tt>.
+      Fixed exponential slowdown with long chains of function calls.
+      Globals no longer leak into the CoffeeScript REPL.
+      Splatted parameters are declared local to the function.
+    </p>
 
     <p>
       <b class="header" style="margin-top: 20px;">1.0.1

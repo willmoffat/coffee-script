@@ -31,18 +31,29 @@ backlog = ''
 # The main REPL function. **run** is called every time a line of code is entered.
 # Attempt to evaluate the command. If there's an exception, print it out instead
 # of exiting.
-run = (buffer) ->
-  code = backlog += '\n' + buffer.toString()
-  if code[code.length - 1] is '\\'
-    return backlog = backlog[0...backlog.length - 1]
-  backlog = ''
-  try
-    val = CoffeeScript.eval code, bare: on, globals: on, filename: 'repl'
-    unless val is undefined
-      process.stdout.write inspect(val, no, 2, enableColours) + '\n'
-  catch err
-    error err
-  repl.prompt()
+run = do ->
+  sandbox =
+    require: require
+    module : { exports: {} }
+  sandbox[g] = global[g] for g of global
+  sandbox.global = sandbox
+  sandbox.global.global = sandbox.global.root = sandbox.global.GLOBAL = sandbox
+  (buffer) ->
+    code = backlog += '\n' + buffer.toString()
+    if code[code.length - 1] is '\\'
+      return backlog = backlog[0...backlog.length - 1]
+    backlog = ''
+    try
+      val = CoffeeScript.eval code, {
+        sandbox,
+        bare: on,
+        filename: 'repl'
+      }
+      unless val is undefined
+        process.stdout.write inspect(val, no, 2, enableColours) + '\n'
+    catch err
+      error err
+    repl.prompt()
 
 ## Autocompletion
 
